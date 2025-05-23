@@ -10,7 +10,6 @@ import sys
 import argparse
 import urllib.parse
 import pychromecast
-from zeroconf import Zeroconf
 from pychromecast.discovery import stop_discovery
 
 
