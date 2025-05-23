@@ -47,10 +47,10 @@ def read_cached_friendly_names_or_none(
 ) -> dict[str, UUID] | None:
     """Cache friendly names and store in a local cache json file"""
 
-    if not CACHE_PATH.is_file():
+    if not path.is_file():
         return None
 
-    devices_bytes = CACHE_PATH.read_bytes()
+    devices_bytes = path.read_bytes()
     if not devices_bytes:
         return None
 

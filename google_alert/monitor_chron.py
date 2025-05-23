@@ -14,6 +14,7 @@ import sqlite3
 import os
 import fcntl
 import logging
+import logging.handlers
 import sys
 from functools import partial
 from typing import Optional, Callable, Tuple, Any, Union
@@ -148,13 +149,6 @@ def is_night_time(current_hour: int, start: int, end: int) -> bool:
 
 
 def main() -> int:
-    # Configure logging
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
-    )
-
     # Acquire lock and ensure it's released
     lockfile = safe_try_with_logging_else_exit(
         partial(acquire_lock, LOCKFILE_PATH), BlockingIOError, "warning", 0
@@ -223,4 +217,15 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    # Configure root logger to send to syslog via /dev/log, using the LOCAL0 facility
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    syslog_handler = logging.handlers.SysLogHandler(
+        address='/dev/log',
+        facility=logging.handlers.SysLogHandler.LOG_LOCAL0
+    )
+    formatter = logging.Formatter('%(name)s[%(process)d]: %(levelname)s %(message)s')
+    syslog_handler.setFormatter(formatter)
+    logger.addHandler(syslog_handler)
     sys.exit(main())
