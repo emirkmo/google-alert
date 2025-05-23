@@ -212,9 +212,10 @@ def main() -> int:
 
         # Record alert
         safe_try_with_logging_else_exit(
-            partial(record_alert,args.db_path), sqlite3.Error, "error", 1
+            partial(record_alert, args.db_path), sqlite3.Error, "error", 1
         )
 
+        # Exit
         logging.info("Alert recorded")
         return 0
     finally:
