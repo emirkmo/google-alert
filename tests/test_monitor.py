@@ -5,39 +5,37 @@ import time
 import unittest
 from unittest.mock import patch, MagicMock
 import importlib
+import sys
 
 # Configure lock path before importing to avoid side effects
 tmp_dir = tempfile.gettempdir()
-env_lock = os.path.join(tmp_dir, 'test_monitor_minute.lock')
-os.environ['MONITOR_MINUTE_LOCK'] = env_lock
+env_lock = os.path.join(tmp_dir, "test_monitor_chron.lock")
+os.environ["MONITOR_MINUTE_LOCK"] = env_lock
 
 # Import and reload module under test to pick up LOCKFILE_PATH
-from google_alert import monitor_chron as monitor_minute # noqa: E402
-importlib.reload(monitor_minute)
+from google_alert import monitor_chron  # noqa: E402
+import google_alert.sensor_db as sensor_db # noqa: E402
+importlib.reload(monitor_chron)
+
 
 class TestMonitorMinute(unittest.TestCase):
     def setUp(self):
         # Spy on discover_devices_cast_message to prevent real broadcasts and record calls
         self.alert_spy = MagicMock()
-        self.alert_patcher = patch(
-            'monitor_minute.discover_devices_cast_message',
-            self.alert_spy
+        self.alert_patcher = patch.object(
+            monitor_chron, "discover_devices_cast_message", self.alert_spy
         )
         self.alert_patcher.start()
         self.addCleanup(self.alert_patcher.stop)
 
         # Create a fresh temporary DB with required tables
-        self.db_fd, self.db_path = tempfile.mkstemp(suffix='.db')
+        self.db_fd, self.db_path = tempfile.mkstemp(suffix=".db")
         os.close(self.db_fd)
-        with sqlite3.connect(self.db_path) as conn:
-            cur = conn.cursor()
-            cur.execute('CREATE TABLE readings(timestamp INTEGER, temperature REAL)')
-            cur.execute('CREATE TABLE alerts(alert_time INTEGER)')
-            conn.commit()
+        sensor_db.init_db(self.db_path)
 
         # Freeze time
         self.start_time = int(time.time())
-        self.time_patcher = patch('time.time', return_value=self.start_time)
+        self.time_patcher = patch("time.time", return_value=self.start_time)
         self.mock_time = self.time_patcher.start()
         self.addCleanup(self.time_patcher.stop)
 
@@ -48,17 +46,20 @@ class TestMonitorMinute(unittest.TestCase):
 
     def run_main(self, **kwargs):
         # Build argument list for main
-        args = [self.db_path]
+        argv = ['monitor_chron', self.db_path]
         for k, v in kwargs.items():
-            args.append(f'--{k}')
+            argv.append(f'--{k}')
             if not isinstance(v, bool):
-                args.append(str(v))
+                argv.append(str(v))
 
-        # Patch sys.exit to capture exit code
-        with patch.object(monitor_minute, 'sys') as mock_sys:
+        # Patch the real sys.argv and capture sys.exit
+        with patch.object(sys, 'argv', argv), \
+             patch.object(monitor_chron, 'sys') as mock_sys:
+
+            # Now parse_args() inside main will see the right argv
             mock_sys.exit = lambda code: (_ for _ in ()).throw(SystemExit(code))
             try:
-                monitor_minute.main()
+                monitor_chron.main()
             except SystemExit as e:
                 return e.code
         return 0
@@ -69,29 +70,23 @@ class TestMonitorMinute(unittest.TestCase):
         self.alert_spy.assert_not_called()
 
     def test_temp_above_threshold(self):
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('INSERT INTO readings VALUES(?, ?)', (self.start_time, 10.0))
-            conn.commit()
+        sensor_db.insert_reading(self.db_path, temperature=10.0)
         code = self.run_main()
         self.assertEqual(code, 0)
         self.alert_spy.assert_not_called()
 
     def test_temp_below_threshold_and_alert(self):
         # Insert a reading below threshold and run
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('INSERT INTO readings VALUES(?, ?)', (self.start_time, 5.0))
-            conn.commit()
+        sensor_db.insert_reading(self.db_path, temperature=5.0)
         code = self.run_main()
         self.assertEqual(code, 0)
-        # Verify alert was invoked exactly once with correct message
-        args = monitor_minute.parse_args()
-        self.alert_spy.assert_called_once_with(args.message)
+        # Verify alert was invoked with the default message
+        self.alert_spy.assert_called_once_with("Temperature below threshold")
+
 
     def test_cooldown_behavior(self):
         # First alert
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('INSERT INTO readings VALUES(?, ?)', (self.start_time, 5.0))
-            conn.commit()
+        sensor_db.insert_reading(self.db_path, temperature=5.0)
         code1 = self.run_main()
         self.assertEqual(code1, 0)
         self.alert_spy.reset_mock()
@@ -99,24 +94,21 @@ class TestMonitorMinute(unittest.TestCase):
         # Advance time within cooldown and insert another low reading
         new_time = self.start_time + 10
         self.mock_time.return_value = new_time
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('INSERT INTO readings VALUES(?, ?)', (new_time, 5.0))
-            conn.commit()
+        sensor_db.insert_reading(self.db_path, temperature=5.0)
         code2 = self.run_main()
         self.assertEqual(code2, 0)
         self.alert_spy.assert_not_called()
 
     def test_night_mode(self):
         # Insert a reading to trigger alert
-        with sqlite3.connect(self.db_path) as conn:
-            conn.execute('INSERT INTO readings VALUES(?, ?)', (self.start_time, 5.0))
-            conn.commit()
+        sensor_db.insert_reading(self.db_path, temperature=5.0)
         # Force local time into night window
         night_time = time.struct_time((2025, 5, 23, 22, 0, 0, 4, 143, 1))
-        with patch('time.localtime', return_value=night_time):
+        with patch("time.localtime", return_value=night_time):
             code = self.run_main()
         self.assertEqual(code, 0)
         self.alert_spy.assert_not_called()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
