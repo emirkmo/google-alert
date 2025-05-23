@@ -1,33 +1,30 @@
-import time
-import argparse
-import sqlite3
-import sys
-import logging
-import os
-import fcntl
-from typing import Optional, Callable, Tuple, Any, Union, Sequence
-
-from .browser import discover_devices_cast_message
-
 """
 monitor_minute.py
 
 Run once per minute (via cron). Query average temperature from SQLite over the last minute,
 alert via Chromecast if below threshold and outside cooldown,
-prevent overlapping runs via file locking.
+preserve DB integrity and prevent overlapping runs.
+
+Night mode: suppress alerts during a nightly window but continue monitoring.
 """
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+import time
+import argparse
+import sqlite3
+import os
+import fcntl
+import logging
+import sys
+from functools import partial
+from typing import Optional, Callable, Tuple, Any, Union
+
+from .browser import discover_devices_cast_message
 
 LOCKFILE_PATH = os.getenv("MONITOR_MINUTE_LOCK", "/tmp/monitor_minute.lock")
 
 
+# Return an open file with an exclusive lock or exit if locked.
 def acquire_lock(path: str):
-    """Return an open file with an exclusive lock or raise SystemExit if locked."""
     lockfile = open(path, "w")
     try:
         fcntl.flock(lockfile, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -36,8 +33,8 @@ def acquire_lock(path: str):
     return lockfile
 
 
+# Parse and return command-line arguments.
 def parse_args() -> argparse.Namespace:
-    """Parse and return command-line arguments."""
     parser = argparse.ArgumentParser(description="Check avg temp and alert if needed")
     parser.add_argument(
         "db_path", help="Path to SQLite DB containing readings and alerts tables"
@@ -53,31 +50,39 @@ def parse_args() -> argparse.Namespace:
         help="Cooldown period in seconds between alerts",
     )
     parser.add_argument(
+        "-w",
+        "--window",
+        type=int,
+        default=60,
+        help="Time window in seconds over which to average the temperature",
+    )
+    parser.add_argument(
         "-m",
         "--message",
         default="Temperature below threshold",
         help="Alert message to send when threshold is breached",
     )
+    parser.add_argument(
+        "--night-start", type=int, default=21, help="Hour (0-23) when night mode starts"
+    )
+    parser.add_argument(
+        "--night-end", type=int, default=7, help="Hour (0-23) when night mode ends"
+    )
     return parser.parse_args()
 
 
+# Safely execute func, log on exception and exit with code.
 def safe_try_with_logging_else_exit(
     func: Callable[[], Any],
-    exceptions: Union[Tuple[type[Exception], ...], type[Exception]],
+    exceptions: Union[Tuple[type[BaseException], ...], type[BaseException]],
     log_level: str,
     exit_code: int,
     exit_callback: Optional[Callable[[], None]] = None,
 ) -> Any:
-    """
-    Safely execute `func`, catch specified exceptions, log at `log_level`,
-    call exit_callback if provided, and exit with `exit_code`.
-    Returns the result of func on success.
-    """
     try:
         return func()
     except exceptions as e:
-        log_msg = f"Error in {func.__name__}: {e}"
-        getattr(logging, log_level)(log_msg)
+        getattr(logging, log_level)(f"Error in {func.__name__}: {e}")
         if exit_callback:
             try:
                 exit_callback()
@@ -86,18 +91,15 @@ def safe_try_with_logging_else_exit(
         raise SystemExit(exit_code)
 
 
+# Check boolean condition, log and exit if true.
 def safe_check_log_and_exit(
-    condition: Callable[[], bool],
+    condition: bool,
     log_level: str,
     message: str,
     exit_code: int,
     exit_callback: Optional[Callable[[], None]] = None,
 ) -> None:
-    """
-    If `condition()` is True, log `message` at `log_level`, call exit_callback,
-    and exit with `exit_code`. Otherwise, continue.
-    """
-    if condition():
+    if condition:
         getattr(logging, log_level)(message)
         if exit_callback:
             try:
@@ -107,118 +109,116 @@ def safe_check_log_and_exit(
         raise SystemExit(exit_code)
 
 
+# Return average temperature over the last `window` seconds.
 def get_avg_temp(db_path: str, window: int = 60) -> Optional[float]:
-    conn = sqlite3.connect(db_path)
-    try:
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cutoff = int(time.time()) - window
         cur.execute(
             "SELECT AVG(temperature) FROM readings WHERE timestamp >= ?", (cutoff,)
         )
         row = cur.fetchone()
-    finally:
-        conn.close()
     return row[0] if row and row[0] is not None else None
 
 
+# Return timestamp of last alert, or 0 if none.
 def get_last_alert(db_path: str) -> int:
-    conn = sqlite3.connect(db_path)
-    try:
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cur.execute("SELECT MAX(alert_time) FROM alerts")
         row = cur.fetchone()
-    finally:
-        conn.close()
     return row[0] or 0
 
 
+# Record a new alert timestamp.
 def record_alert(db_path: str, ts: Optional[int] = None) -> None:
-    conn = sqlite3.connect(db_path)
-    try:
+    with sqlite3.connect(db_path) as conn:
         cur = conn.cursor()
         cur.execute(
             "INSERT INTO alerts(alert_time) VALUES (?)", (ts or int(time.time()),)
         )
         conn.commit()
-    finally:
-        conn.close()
+
+
+# Return True if current_hour is within the night window [start,end).
+def is_night_time(current_hour: int, start: int, end: int) -> bool:
+    if start < end:
+        return start <= current_hour < end
+    return current_hour >= start or current_hour < end
 
 
 def main() -> int:
-    # Prevent overlap
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    # Acquire lock and ensure it's released
     lockfile = safe_try_with_logging_else_exit(
-        lambda: acquire_lock(LOCKFILE_PATH), BlockingIOError, "warning", 0
+        partial(acquire_lock, LOCKFILE_PATH), BlockingIOError, "warning", 0
     )
+    try:
+        args = parse_args()
 
-    args = parse_args()
+        # Fetch temp
+        avg_temp = safe_try_with_logging_else_exit(
+            partial(get_avg_temp, args.db_path, args.window), sqlite3.Error, "error", 1
+        )
+        # No readings
+        safe_check_log_and_exit(
+            avg_temp is None, "info", "No readings in the last minute.", 0
+        )
+        logging.info(f"Avg temp: {avg_temp:.2f}°C")
 
-    # Fetch average temperature
-    avg_temp = safe_try_with_logging_else_exit(
-        lambda: get_avg_temp(args.db_path), sqlite3.Error, "error", 1, lockfile.close
-    )
-    # Check for missing readings
-    safe_check_log_and_exit(
-        lambda: avg_temp is None,
-        "info",
-        "No readings in the last minute.",
-        0,
-        lockfile.close,
-    )
-    logging.info(f"Avg temp: {avg_temp:.2f}°C")
+        # Above threshold
+        safe_check_log_and_exit(
+            avg_temp >= args.threshold,
+            "info",
+            "Temperature above threshold; no alert.",
+            0,
+        )
 
-    # Check above threshold
-    safe_check_log_and_exit(
-        lambda: avg_temp >= args.threshold,
-        "info",
-        "Temperature above threshold; no alert.",
-        0,
-        lockfile.close,
-    )
+        # Last alert
+        last = safe_try_with_logging_else_exit(
+            partial(get_last_alert, args.db_path), sqlite3.Error, "error", 1
+        )
+        now = int(time.time())
+        elapsed = now - last
 
-    # Below threshold: check cooldown
-    last = safe_try_with_logging_else_exit(
-        lambda: get_last_alert(args.db_path), sqlite3.Error, "error", 1, lockfile.close
-    )
+        # Clock skew
+        safe_check_log_and_exit(
+            elapsed < 0, "error", f"Clock skew: elapsed={elapsed}s.", 1
+        )
+        # Cooldown
+        safe_check_log_and_exit(
+            elapsed < args.cooldown, "info", f"Cooldown active ({elapsed}s).", 0
+        )
 
-    # 
-    now = int(time.time())
-    elapsed = now - last
+        # Night mode
+        safe_check_log_and_exit(
+            is_night_time(time.localtime().tm_hour, args.night_start, args.night_end),
+            "info",
+            f"Night mode: {args.night_start}-{args.night_end}h.",
+            0,
+        )
 
-    # Check for clock skew
-    safe_check_log_and_exit(
-        lambda: elapsed < 0,
-        "error",
-        f"Clock skew detected: last alert in the future (elapsed={elapsed}s).",
-        1,
-        lockfile.close,
-    )
-    # Check cooldown
-    safe_check_log_and_exit(
-        lambda: elapsed < args.cooldown,
-        "info",
-        f"Cooldown active ({elapsed}s); no alert.",
-        0,
-        lockfile.close,
-    )
+        # Send alert
+        logging.warning(f"Threshold crossed; alerting. Last at {last}")
+        safe_try_with_logging_else_exit(
+            partial(discover_devices_cast_message, args.message), Exception, "error", 1
+        )
 
-    # Send alert
-    logging.warning(f"Threshold crossed; alerting. Last at {last}")
-    safe_try_with_logging_else_exit(
-        lambda: discover_devices_cast_message(args.message),
-        Exception,
-        "error",
-        1,
-        lockfile.close,
-    )
+        # Record alert
+        safe_try_with_logging_else_exit(
+            partial(record_alert,args.db_path), sqlite3.Error, "error", 1
+        )
 
-    # Record alert
-    safe_try_with_logging_else_exit(
-        lambda: record_alert(args.db_path), sqlite3.Error, "error", 1, lockfile.close
-    )
-
-    logging.info("Alert executed and recorded.")
-    lockfile.close()
-    return 0
+        logging.info("Alert recorded")
+        return 0
+    finally:
+        lockfile.close()
 
 
 if __name__ == "__main__":
