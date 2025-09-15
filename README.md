@@ -134,7 +134,9 @@ Releases are automatically published to PyPI when GitHub releases are created:
 
 1. **Update version** in `pyproject.toml`
 2. **Create GitHub release** with a tag
-3. **GitHub Actions** automatically builds and publishes to PyPI
+3. **GitHub Actions** automatically builds and publishes to PyPI via the `pypi` environment
+
+**Note**: The `pypi` environment has protection rules requiring approval before publishing.
 
 #### Manual Publishing
 
@@ -155,6 +157,19 @@ The repository is configured for PyPI trusted publishing with these settings:
 - **GitHub Owner**: `emirkmo`
 - **GitHub Repository**: `google-alert`
 - **Workflow**: `.github/workflows/ci-cd.yml`
+- **Environment**: `pypi` (with protection rules)
+
+#### Verifying Setup
+
+Check the environment and publishing configuration:
+
+```bash
+# Verify GitHub environment exists
+gh api repos/emirkmo/google-alert/environments
+
+# Check workflow configuration
+gh workflow view ci-cd.yml
+```
 
 The minimal dependencies (`orjson`, `pychromecast`) make it lightweight and suitable for distribution.
 

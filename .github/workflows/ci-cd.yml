@@ -39,6 +39,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
+    environment: pypi
     permissions:
       id-token: write
       contents: read
