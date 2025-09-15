@@ -170,19 +170,6 @@ gh api repos/emirkmo/google-alert/environments
 # Check workflow configuration
 gh workflow view ci-cd.yml
 ```
-- **Environment**: `pypi` (with protection rules)
-
-#### Verifying Setup
-
-Check the environment and publishing configuration:
-
-```bash
-# Verify GitHub environment exists
-gh api repos/emirkmo/google-alert/environments
-
-# Check workflow configuration
-gh workflow view ci-cd.yml
-```
 
 The minimal dependencies (`orjson`, `pychromecast`) make it lightweight and suitable for distribution.
 
