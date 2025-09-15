@@ -126,15 +126,5 @@ def discover_devices_cast_message(msg: str, discovery_timeout: int = 30):
     finally:
         browser.stop_discovery()
 
-
-# zconf = zeroconf.Zeroconf()
-# listener = SimpleCastListener(lambda uuid, service: friendly_names.append(browser.devices[uuid].friendly_name))
-# browser = CastBrowser(listener, zconf)
-
-# # Discover
-# browser.start_discovery()
-# time.sleep(timeout)
-# pychromecast.discovery.stop_discovery(browser)
-# zconf.close()
-
-# return friendly_names
+if __name__ == "__main__":
+    discover_devices_cast_message("HELLO FAMILY, WHERE ARE YOU?")
