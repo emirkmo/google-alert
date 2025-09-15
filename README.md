@@ -2,6 +2,8 @@
 
 A Python library for sending temperature alerts via Chromecast devices. This library provides the core functionality for monitoring temperature data stored in SQLite and broadcasting alerts when thresholds are exceeded.
 
+NOTE: AI was used to help write the README and with some github actions worklows. Rest is *hand-coded*. Apologies in advance for a rambling README as a result.
+
 ## Features
 
 - 📺 **Chromecast Alerts**: Instant notifications via Chromecast devices
