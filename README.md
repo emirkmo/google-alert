@@ -126,15 +126,35 @@ This library follows a clean separation of concerns:
 
 ### Publishing to PyPI
 
-This library is designed to be published as a standalone package on PyPI:
+This library uses **trusted publishing** for secure, automated PyPI releases via GitHub Actions. No API tokens are required!
+
+#### Automated Publishing
+
+Releases are automatically published to PyPI when GitHub releases are created:
+
+1. **Update version** in `pyproject.toml`
+2. **Create GitHub release** with a tag
+3. **GitHub Actions** automatically builds and publishes to PyPI
+
+#### Manual Publishing
+
+For manual publishing (requires PyPI API token):
 
 ```bash
 # Build the package
 uv build
 
-# Publish to PyPI (after setting up credentials)
+# Publish to PyPI
 uv publish
 ```
+
+#### Trusted Publishing Setup
+
+The repository is configured for PyPI trusted publishing with these settings:
+- **PyPI Project**: `google-alert`
+- **GitHub Owner**: `emirkmo`
+- **GitHub Repository**: `google-alert`
+- **Workflow**: `.github/workflows/ci-cd.yml`
 
 The minimal dependencies (`orjson`, `pychromecast`) make it lightweight and suitable for distribution.
 
