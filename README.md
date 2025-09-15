@@ -1,16 +1,15 @@
 # Google Alert
 
-A temperature monitoring system that sends alerts via Chromecast when temperatures fall below a configured threshold. Perfect for monitoring server rooms, greenhouses, or any environment where temperature monitoring is critical.
+A Python library for sending temperature alerts via Chromecast devices. This library provides the core functionality for monitoring temperature data stored in SQLite and broadcasting alerts when thresholds are exceeded.
 
 ## Features
 
-- 🌡️ **Temperature Monitoring**: Continuous monitoring with configurable thresholds
 - 📺 **Chromecast Alerts**: Instant notifications via Chromecast devices
 - 🌙 **Night Mode**: Suppress alerts during specified hours (e.g., 9 PM - 7 AM)
 - ⏰ **Cooldown Period**: Prevent alert spam with configurable cooldown periods
 - 🔒 **Process Safety**: File locking prevents overlapping monitoring processes
-- 📊 **SQLite Storage**: Persistent storage of temperature readings and alert history
-- 🧪 **Comprehensive Testing**: Full test suite with 100% test coverage
+- 📊 **SQLite Integration**: Works with temperature data stored in SQLite databases
+- 🧪 **Comprehensive Testing**: Full test suite covering all core functionality
 
 ## Quick Start
 
@@ -30,15 +29,12 @@ pip install -e .
 
 ### Basic Usage
 
-1. **Start temperature monitoring**:
-   ```bash
-   python temp_sensor.py /path/to/database.db
-   ```
+**Set up monitoring alerts** (run via cron every minute):
+```bash
+python -m google_alert.monitor_chron /path/to/database.db
+```
 
-2. **Set up monitoring alerts** (run via cron every minute):
-   ```bash
-   python -m google_alert.monitor_chron /path/to/database.db
-   ```
+**Note**: This library focuses on the alerting functionality. For a complete temperature monitoring system including DHT sensor reading, see the [DHT22 Temperature Monitor](https://github.com/emirkmo/dht22_temp_monitor_google_alert/) repository, which includes the `temp_sensor.py` implementation and embedded Adafruit_DHT library.
 
 ## Configuration
 
@@ -68,12 +64,39 @@ Add to your crontab (`crontab -e`) to run monitoring every minute:
 
 ## Architecture
 
-### Components
+### Core Modules
 
-- **`temp_sensor.py`**: Main temperature sensor script that reads from DHT22/AM2302 sensors
-- **`monitor_chron.py`**: Cron job script that checks temperature averages and sends alerts
-- **`sensor_db.py`**: Database operations for storing readings and alert history
+- **`monitor_chron.py`**: Main monitoring script that checks temperature averages and sends alerts
+- **`sensor_db.py`**: Database operations for reading temperature data and managing alert history
 - **`browser.py`**: Chromecast device discovery and message broadcasting
+
+### Module Descriptions
+
+#### `monitor_chron.py`
+The core monitoring module that runs as a cron job. It:
+- Queries average temperature from SQLite over a configurable time window
+- Checks if temperature is below threshold
+- Enforces cooldown periods to prevent alert spam
+- Implements night mode to suppress alerts during specified hours
+- Uses file locking to prevent overlapping runs
+- Sends alerts via Chromecast when conditions are met
+
+#### `sensor_db.py`
+Database interface module that provides:
+- SQLite database initialization with proper schema
+- Temperature reading insertion and retrieval
+- Alert history tracking for cooldown management
+- Average temperature calculation over time windows
+
+#### `browser.py`
+Chromecast communication module that handles:
+- Automatic discovery of Chromecast devices on the network
+- Message broadcasting to all available devices
+- Error handling for network and device communication issues
+
+### Example Usage
+
+The `temp_sensor.py` in the [DHT22 Temperature Monitor repository](https://github.com/emirkmo/dht22_temp_monitor_google_alert/) demonstrates how to use this library as part of a complete temperature monitoring system.
 
 ### Database Schema
 
@@ -109,15 +132,13 @@ uv build
 ## Requirements
 
 - Python 3.11+
-- DHT22/AM2302 temperature sensor (for temp_sensor.py)
 - Chromecast devices on the same network
-- SQLite database
+- SQLite database with temperature readings
 
 ### Dependencies
 
 - `orjson`: Fast JSON serialization
 - `pychromecast`: Chromecast device communication
-- `Adafruit_DHT`: DHT sensor library (for temp_sensor.py)
 
 ## Alert Logic
 
@@ -138,7 +159,7 @@ Night mode suppresses alerts during specified hours to avoid disturbing sleep. T
 
 1. **No Chromecast devices found**: Ensure devices are on the same network and not in guest mode
 2. **Database locked**: Check for multiple instances running simultaneously
-3. **Sensor read errors**: Verify DHT sensor connections and permissions
+3. **No temperature data**: Ensure your temperature sensor system is writing data to the SQLite database
 
 ### Logging
 
