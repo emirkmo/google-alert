@@ -39,6 +39,9 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name == 'release' && github.event.action == 'published'
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
     - uses: actions/checkout@v4
@@ -59,8 +62,6 @@ jobs:
     
     - name: Publish to PyPI
       run: uv publish
-      env:
-        UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     
     - name: Create GitHub Release
       uses: actions/create-release@v1

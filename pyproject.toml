@@ -40,3 +40,6 @@ packages = ["google_alert"]
 
 [tool.hatch.build.sources]
 "." = "google_alert"
+
+[tool.uv.publish]
+repository = "pypi"
