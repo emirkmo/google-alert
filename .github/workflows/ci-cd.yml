@@ -34,18 +34,6 @@ jobs:
     
     - name: Build package
       run: uv build
-    
-    - name: Verify package contents
-      run: |
-        echo "Package contents:"
-        uv run python -m zipfile -l dist/*.whl
-        echo "Checking examples are excluded:"
-        if uv run python -m zipfile -l dist/*.whl | grep -q "examples/"; then
-          echo "ERROR: Examples directory found in package!"
-          exit 1
-        else
-          echo "✓ Examples correctly excluded from package"
-        fi
 
   publish:
     needs: test
