@@ -15,6 +15,12 @@ A Python library for sending temperature alerts via Chromecast devices. This lib
 
 ### Installation
 
+**From PyPI (recommended):**
+```bash
+pip install google-alert
+```
+
+**From source:**
 ```bash
 # Clone the repository
 git clone https://github.com/emirkmo/google-alert.git
@@ -96,7 +102,41 @@ Chromecast communication module that handles:
 
 ### Example Usage
 
-The `temp_sensor.py` in the [DHT22 Temperature Monitor repository](https://github.com/emirkmo/dht22_temp_monitor_google_alert/) demonstrates how to use this library as part of a complete temperature monitoring system.
+This library is designed to work with any temperature data source. See the `examples/` directory for usage examples:
+
+- **`examples/temp_sensor.py`**: Simple example showing how to use the library with DHT sensors
+- **[DHT22 Temperature Monitor](https://github.com/emirkmo/dht22_temp_monitor_google_alert/)**: Complete production implementation with modular sensor handling
+
+## Library Design Philosophy
+
+### Separation of Concerns
+
+This library follows a clean separation of concerns:
+
+- **`google_alert`**: Pure alerting library focused on Chromecast notifications
+- **Sensor implementations**: Separate repositories handle hardware-specific data collection
+- **Database schema**: Controlled by the alerting library for consistency
+
+### Why Separate Repositories?
+
+1. **Library Reusability**: The `google_alert` package can be used with any temperature data source (DHT22, DS18B20, BME280, etc.)
+2. **Independent Evolution**: Alerting logic and sensor hardware can evolve independently
+3. **Clear Dependencies**: Sensor implementations depend on the alerting library, not vice versa
+4. **Focused Scope**: Each repository has a single, well-defined responsibility
+
+### Publishing to PyPI
+
+This library is designed to be published as a standalone package on PyPI:
+
+```bash
+# Build the package
+uv build
+
+# Publish to PyPI (after setting up credentials)
+uv publish
+```
+
+The minimal dependencies (`orjson`, `pychromecast`) make it lightweight and suitable for distribution.
 
 ### Database Schema
 
@@ -119,6 +159,11 @@ uv run pytest tests/ -v
 # Run specific test
 uv run pytest tests/test_monitor.py::TestMonitorMinute::test_night_time_alert_silencing -v
 ```
+
+### Examples
+
+Check the `examples/` directory for usage examples:
+- `examples/temp_sensor.py`: Simple DHT sensor integration example
 
 ### Building the Package
 
