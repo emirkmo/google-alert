@@ -63,29 +63,3 @@ jobs:
     
     - name: Publish to PyPI
       run: uv publish
-    
-    - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.event.release.tag_name }}
-        release_name: ${{ github.event.release.name }}
-        body: |
-          ## Changes in this release
-          
-          See the [changelog](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for detailed changes.
-          
-          ## Installation
-          
-          ```bash
-          pip install google-alert
-          ```
-          
-          ## Usage
-          
-          ```bash
-          python -m google_alert.monitor_chron /path/to/database.db
-          ```
-        draft: false
-        prerelease: false
