@@ -1,9 +1,25 @@
 [project]
 name = "google-alert"
 version = "0.1.0"
-description = "Add your description here"
+description = "A Python library for sending temperature alerts via Chromecast devices"
 readme = "README.md"
 requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "Emir", email = "emir@example.com"}
+]
+keywords = ["temperature", "monitoring", "chromecast", "alerts", "iot"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+    "Topic :: Home Automation",
+]
 dependencies = [
     "orjson>=3.10.18",
     "pychromecast>=14.0.7",
