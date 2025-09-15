@@ -1,0 +1,67 @@
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v0.1.3)'
+        required: true
+        type: string
+      title:
+        description: 'Release title'
+        required: true
+        type: string
+      changes:
+        description: 'Changes in this release (markdown format)'
+        required: true
+        type: string
+        default: |
+          ## Changes in this release
+          
+          - Bug fixes and improvements
+          - Enhanced functionality
+          
+          See the [changelog](https://github.com/${{ github.repository }}/blob/master/CHANGELOG.md) for detailed changes.
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.event.inputs.version }}
+        release_name: ${{ github.event.inputs.title }}
+        body: |
+          ${{ github.event.inputs.changes }}
+          
+          ## Installation
+          
+          ```bash
+          pip install google-alert
+          ```
+          
+          ## Usage
+          
+          ```bash
+          python -m google_alert.monitor_chron /path/to/database.db
+          ```
+          
+          ## Features
+          
+          - 🌡️ **Temperature Monitoring**: Continuous monitoring with configurable thresholds
+          - 📺 **Chromecast Alerts**: Instant notifications via Chromecast devices
+          - 🌙 **Night Mode**: Suppress alerts during specified hours (e.g., 9 PM - 7 AM)
+          - ⏰ **Cooldown Period**: Prevent alert spam with configurable cooldown periods
+          - 🔒 **Process Safety**: File locking prevents overlapping monitoring processes
+          - 📊 **SQLite Integration**: Works with temperature data stored in SQLite databases
+          - 🧪 **Comprehensive Testing**: Full test suite covering all core functionality
+        draft: false
+        prerelease: false
