@@ -77,26 +77,54 @@ class TestMonitorMinute(unittest.TestCase):
     def test_temp_below_threshold_and_alert(self):
         # Insert a reading below threshold and run
         sensor_db.insert_reading(self.db_path, temperature=5.0)
-        code = self.run_main()
+        # Force local time to daytime hours to avoid night mode
+        day_time = time.struct_time((2025, 5, 23, 12, 0, 0, 4, 143, 1))
+        with patch("time.localtime", return_value=day_time):
+            code = self.run_main()
         self.assertEqual(code, 0)
         # Verify alert was invoked with the default message
         self.alert_spy.assert_called_once_with("Temperature below threshold")
 
 
     def test_cooldown_behavior(self):
-        # First alert
-        sensor_db.insert_reading(self.db_path, temperature=5.0)
-        code1 = self.run_main()
-        self.assertEqual(code1, 0)
-        self.alert_spy.reset_mock()
+        # Force local time to daytime hours to avoid night mode
+        day_time = time.struct_time((2025, 5, 23, 12, 0, 0, 4, 143, 1))
+        with patch("time.localtime", return_value=day_time):
+            # First alert
+            sensor_db.insert_reading(self.db_path, temperature=5.0)
+            code1 = self.run_main()
+            self.assertEqual(code1, 0)
+            self.alert_spy.reset_mock()
 
-        # Advance time within cooldown and insert another low reading
-        new_time = self.start_time + 10
-        self.mock_time.return_value = new_time
+            # Advance time within cooldown and insert another low reading
+            new_time = self.start_time + 10
+            self.mock_time.return_value = new_time
+            sensor_db.insert_reading(self.db_path, temperature=5.0)
+            code2 = self.run_main()
+            self.assertEqual(code2, 0)
+            self.alert_spy.assert_not_called()
+
+    def test_night_time_alert_silencing(self):
+        """Test that alerts are properly silenced during night time hours"""
+        # Insert a reading below threshold that would normally trigger an alert
         sensor_db.insert_reading(self.db_path, temperature=5.0)
-        code2 = self.run_main()
-        self.assertEqual(code2, 0)
-        self.alert_spy.assert_not_called()
+        
+        # Test different night time hours to ensure comprehensive coverage
+        night_hours = [22, 23, 0, 1, 2, 3, 4, 5, 6]  # 10 PM to 6 AM
+        
+        for hour in night_hours:
+            with self.subTest(hour=hour):
+                # Reset the spy for each iteration
+                self.alert_spy.reset_mock()
+                
+                # Force local time into night window
+                night_time = time.struct_time((2025, 5, 23, hour, 0, 0, 4, 143, 1))
+                with patch("time.localtime", return_value=night_time):
+                    code = self.run_main()
+                
+                # Should exit successfully but no alert should be sent
+                self.assertEqual(code, 0)
+                self.alert_spy.assert_not_called()
 
     def test_night_mode(self):
         # Insert a reading to trigger alert
